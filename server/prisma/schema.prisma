@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// NOTE: SQLite has no native enum type, so role/status/type fields below are
+// plain Strings constrained at the application layer (see server/src/types.ts
+// and the zod schemas in each route module) to one of a fixed set of values:
+//   User.role            -> "ADMIN" | "MANAGER" | "STAFF"
+//   StockMovement.type   -> "IN" | "OUT" | "ADJUSTMENT"
+//   Sale.status          -> "PAID" | "PARTIAL" | "UNPAID"
+//   Sale.paymentMethod   -> "CASH" | "CARD" | "BANK_TRANSFER" | "CREDIT"
+//   PurchaseOrder.status -> "DRAFT" | "ORDERED" | "RECEIVED" | "CANCELLED"
+
+model User {
+  id             Int             @id @default(autoincrement())
+  name           String
+  email          String          @unique
+  passwordHash   String
+  role           String          @default("STAFF")
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  sales          Sale[]
+  purchaseOrders PurchaseOrder[]
+}
+
+model Category {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  products Product[]
+}
+
+model Supplier {
+  id             Int             @id @default(autoincrement())
+  name           String
+  contactPerson  String?
+  phone          String?
+  email          String?
+  address        String?
+  createdAt      DateTime        @default(now())
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
+}
+
+model Product {
+  id           Int                 @id @default(autoincrement())
+  sku          String              @unique
+  name         String
+  description  String?
+  brand        String?
+  unit         String              @default("pcs")
+  costPrice    Float               @default(0)
+  sellPrice    Float               @default(0)
+  stockQty     Float               @default(0)
+  reorderLevel Float               @default(5)
+  active       Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  categoryId   Int?
+  category     Category?           @relation(fields: [categoryId], references: [id])
+  supplierId   Int?
+  supplier     Supplier?           @relation(fields: [supplierId], references: [id])
+  saleItems    SaleItem[]
+  poItems      PurchaseOrderItem[]
+  movements    StockMovement[]
+}
+
+model StockMovement {
+  id            Int      @id @default(autoincrement())
+  productId     Int
+  product       Product  @relation(fields: [productId], references: [id])
+  type          String
+  quantity      Float
+  reason        String?
+  referenceType String?
+  referenceId   Int?
+  createdAt     DateTime @default(now())
+}
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  createdAt DateTime @default(now())
+  sales     Sale[]
+}
+
+model Sale {
+  id            Int        @id @default(autoincrement())
+  saleNumber    String     @unique
+  customerId    Int?
+  customer      Customer?  @relation(fields: [customerId], references: [id])
+  userId        Int?
+  user          User?      @relation(fields: [userId], references: [id])
+  items         SaleItem[]
+  subtotal      Float
+  discount      Float      @default(0)
+  tax           Float      @default(0)
+  total         Float
+  amountPaid    Float      @default(0)
+  status        String     @default("UNPAID")
+  paymentMethod String     @default("CASH")
+  notes         String?
+  createdAt     DateTime   @default(now())
+}
+
+model SaleItem {
+  id        Int     @id @default(autoincrement())
+  saleId    Int
+  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Float
+  unitPrice Float
+  unitCost  Float   @default(0)
+  lineTotal Float
+}
+
+model PurchaseOrder {
+  id           Int                 @id @default(autoincrement())
+  poNumber     String              @unique
+  supplierId   Int
+  supplier     Supplier            @relation(fields: [supplierId], references: [id])
+  userId       Int?
+  user         User?               @relation(fields: [userId], references: [id])
+  items        PurchaseOrderItem[]
+  status       String              @default("DRAFT")
+  orderDate    DateTime            @default(now())
+  expectedDate DateTime?
+  receivedAt   DateTime?
+  notes        String?
+  total        Float               @default(0)
+  createdAt    DateTime            @default(now())
+}
+
+model PurchaseOrderItem {
+  id              Int           @id @default(autoincrement())
+  purchaseOrderId Int
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productId       Int
+  product         Product       @relation(fields: [productId], references: [id])
+  quantity        Float
+  unitCost        Float
+  lineTotal       Float
+}
